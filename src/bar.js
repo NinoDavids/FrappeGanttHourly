@@ -626,43 +626,56 @@ export default class Bar {
             this.task._index * (this.height + this.gantt.options.padding);
     }
 
-    compute_duration() {
-        let actual_duration_in_days = 0,
-            duration_in_days = 0;
-        // console.log(this.task._start, this.task._end);
-        for (
-            let d = new Date(this.task._start);
-            d < this.task._end;
-            d.setDate(d.getDate() + 1)
-        ) {
-            duration_in_days++;
-            if (
-                !this.gantt.config.ignored_dates.find(
-                    (k) => k.getTime() === d.getTime(),
-                ) &&
-                (!this.gantt.config.ignored_function ||
-                    !this.gantt.config.ignored_function(d))
-            ) {
-                actual_duration_in_days++;
-            }
-        }
-        this.task.actual_duration = actual_duration_in_days;
-        this.task.ignored_duration = duration_in_days - actual_duration_in_days;
+compute_duration() {
+    const start = this.task._start;
+    const end = this.task._end;
 
-        this.duration =
-            date_utils.convert_scales(
-                duration_in_days + 'd',
-                this.gantt.config.unit,
-            ) / this.gantt.config.step;
+    const totalUnits =
+        date_utils.diff(end, start, this.gantt.config.unit) /
+        this.gantt.config.step;
 
-        this.actual_duration_raw =
-            date_utils.convert_scales(
-                actual_duration_in_days + 'd',
-                this.gantt.config.unit,
-            ) / this.gantt.config.step;
+    this.duration = Math.max(0, totalUnits);
 
-        this.ignored_duration_raw = this.duration - this.actual_duration_raw;
+    if (this.gantt.config.unit === 'hour') {
+        this.actual_duration_raw = this.duration;
+        this.ignored_duration_raw = 0;
+
+        const totalHours = date_utils.diff(end, start, 'hour');
+        this.task.actual_duration = totalHours / 24;
+        this.task.ignored_duration = 0;
+        return;
     }
+
+    let actual_duration_in_days = 0;
+    let duration_in_days = 0;
+
+    for (
+        let d = new Date(start);
+        d < end;
+        d.setDate(d.getDate() + 1)
+    ) {
+        duration_in_days++;
+
+        if (
+            !this.gantt.config.ignored_dates.find(k => k.getTime() === d.getTime()) &&
+            (!this.gantt.config.ignored_function ||
+                !this.gantt.config.ignored_function(d))
+        ) {
+            actual_duration_in_days++;
+        }
+    }
+
+    this.task.actual_duration = actual_duration_in_days;
+    this.task.ignored_duration = duration_in_days - actual_duration_in_days;
+
+    this.actual_duration_raw =
+        date_utils.convert_scales(
+            actual_duration_in_days + 'd',
+            this.gantt.config.unit
+        ) / this.gantt.config.step;
+
+    this.ignored_duration_raw = this.duration - this.actual_duration_raw;
+}
 
     update_attr(element, attr, value) {
         value = +value;
