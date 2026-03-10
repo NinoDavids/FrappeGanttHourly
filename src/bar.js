@@ -572,18 +572,17 @@ export default class Bar {
         return parseInt((progress / total) * 100, 10);
     }
 
-compute_expected_progress() {
-    const now = new Date();
-
-    const elapsed =
-        date_utils.diff(now, this.task._start, this.gantt.config.unit) /
-        this.gantt.config.step;
-
-    const clamped_elapsed = Math.max(0, Math.min(elapsed, this.duration));
-
-    this.expected_progress =
-        this.duration > 0 ? (clamped_elapsed * 100) / this.duration : 0;
-}
+    compute_expected_progress() {
+        this.expected_progress =
+            date_utils.diff(date_utils.today(), this.task._start, 'hour') /
+            this.gantt.config.step;
+        this.expected_progress =
+            ((this.expected_progress < this.duration
+                ? this.expected_progress
+                : this.duration) *
+                100) /
+            this.duration;
+    }
 
     compute_x() {
         const { column_width } = this.gantt.config;
@@ -637,17 +636,15 @@ compute_duration() {
 
     this.duration = Math.max(0, totalUnits);
 
-if (this.gantt.config.unit === 'hour') {
-    this.actual_duration_raw = this.duration;
-    this.ignored_duration_raw = 0;
+    if (this.gantt.config.unit === 'hour') {
+        this.actual_duration_raw = this.duration;
+        this.ignored_duration_raw = 0;
 
-    const totalHours = date_utils.diff(end, start, 'hour');
-
-    this.task.actual_duration = totalHours;
-    this.task.ignored_duration = 0;
-
-    return;
-}
+        const totalHours = date_utils.diff(end, start, 'hour');
+        this.task.actual_duration = totalHours / 24;
+        this.task.ignored_duration = 0;
+        return;
+    }
 
     let actual_duration_in_days = 0;
     let duration_in_days = 0;
