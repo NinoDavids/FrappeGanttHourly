@@ -239,7 +239,6 @@ export default class Bar {
             class: 'bar-label',
             append_to: this.bar_group,
         });
-        // labels get BBox in the next tick
         requestAnimationFrame(() => this.update_label_position());
     }
 
@@ -401,7 +400,6 @@ export default class Bar {
 
         $.on(this.group, 'dblclick', (e) => {
             if (this.action_completed) {
-                // just finished a move action, wait for a few seconds
                 return;
             }
             this.group.classList.remove('active');
@@ -420,10 +418,8 @@ export default class Bar {
                 return false;
             }
             e.preventDefault();
-            //action on double tap goes below
 
             if (this.action_completed) {
-                // just finished a move action, wait for a few seconds
                 return;
             }
             this.group.classList.remove('active');
@@ -539,13 +535,30 @@ export default class Bar {
     compute_start_end_date() {
         const bar = this.$bar;
         const x_in_units = bar.getX() / this.gantt.config.column_width;
+        const width_in_units = bar.getWidth() / this.gantt.config.column_width;
+
+        if (this.gantt.config.unit === 'hour') {
+            const stepHours = this.gantt.config.step;
+            const startMs =
+                this.gantt.gantt_start.getTime() +
+                x_in_units * stepHours * 60 * 60 * 1000;
+
+            const endMs =
+                startMs +
+                width_in_units * stepHours * 60 * 60 * 1000;
+
+            return {
+                new_start_date: new Date(startMs),
+                new_end_date: new Date(endMs),
+            };
+        }
+
         let new_start_date = date_utils.add(
             this.gantt.gantt_start,
             x_in_units * this.gantt.config.step,
             this.gantt.config.unit,
         );
 
-        const width_in_units = bar.getWidth() / this.gantt.config.column_width;
         const new_end_date = date_utils.add(
             new_start_date,
             width_in_units * this.gantt.config.step,
@@ -595,27 +608,6 @@ export default class Bar {
 
         let x = diff * column_width;
 
-        /* Since the column width is based on 30,
-        we count the month-difference, multiply it by 30 for a "pseudo-month"
-        and then add the days in the month, making sure the number does not exceed 29
-        so it is within the column */
-
-        // if (this.gantt.view_is('Month')) {
-        //     const diffDaysBasedOn30DayMonths =
-        //         date_utils.diff(task_start, gantt_start, 'month') * 30;
-        //     const dayInMonth = Math.min(
-        //         29,
-        //         date_utils.format(
-        //             task_start,
-        //             'DD',
-        //             this.gantt.options.language,
-        //         ),
-        //     );
-        //     const diff = diffDaysBasedOn30DayMonths + dayInMonth;
-
-        //     x = (diff * column_width) / 30;
-        // }
-
         this.x = x;
     }
 
@@ -626,56 +618,56 @@ export default class Bar {
             this.task._index * (this.height + this.gantt.options.padding);
     }
 
-compute_duration() {
-    const start = this.task._start;
-    const end = this.task._end;
+    compute_duration() {
+        const start = this.task._start;
+        const end = this.task._end;
 
-    const totalUnits =
-        date_utils.diff(end, start, this.gantt.config.unit) /
-        this.gantt.config.step;
+        const totalUnits =
+            date_utils.diff(end, start, this.gantt.config.unit) /
+            this.gantt.config.step;
 
-    this.duration = Math.max(0, totalUnits);
+        this.duration = Math.max(0, totalUnits);
 
-    if (this.gantt.config.unit === 'hour') {
-        this.actual_duration_raw = this.duration;
-        this.ignored_duration_raw = 0;
+        if (this.gantt.config.unit === 'hour') {
+            this.actual_duration_raw = this.duration;
+            this.ignored_duration_raw = 0;
 
-        const totalHours = date_utils.diff(end, start, 'hour');
-        this.task.actual_duration = totalHours / 24;
-        this.task.ignored_duration = 0;
-        return;
-    }
-
-    let actual_duration_in_days = 0;
-    let duration_in_days = 0;
-
-    for (
-        let d = new Date(start);
-        d < end;
-        d.setDate(d.getDate() + 1)
-    ) {
-        duration_in_days++;
-
-        if (
-            !this.gantt.config.ignored_dates.find(k => k.getTime() === d.getTime()) &&
-            (!this.gantt.config.ignored_function ||
-                !this.gantt.config.ignored_function(d))
-        ) {
-            actual_duration_in_days++;
+            const totalHours = date_utils.diff(end, start, 'hour');
+            this.task.actual_duration = totalHours / 24;
+            this.task.ignored_duration = 0;
+            return;
         }
+
+        let actual_duration_in_days = 0;
+        let duration_in_days = 0;
+
+        for (
+            let d = new Date(start);
+            d < end;
+            d.setDate(d.getDate() + 1)
+        ) {
+            duration_in_days++;
+
+            if (
+                !this.gantt.config.ignored_dates.find(k => k.getTime() === d.getTime()) &&
+                (!this.gantt.config.ignored_function ||
+                    !this.gantt.config.ignored_function(d))
+            ) {
+                actual_duration_in_days++;
+            }
+        }
+
+        this.task.actual_duration = actual_duration_in_days;
+        this.task.ignored_duration = duration_in_days - actual_duration_in_days;
+
+        this.actual_duration_raw =
+            date_utils.convert_scales(
+                actual_duration_in_days + 'd',
+                this.gantt.config.unit
+            ) / this.gantt.config.step;
+
+        this.ignored_duration_raw = this.duration - this.actual_duration_raw;
     }
-
-    this.task.actual_duration = actual_duration_in_days;
-    this.task.ignored_duration = duration_in_days - actual_duration_in_days;
-
-    this.actual_duration_raw =
-        date_utils.convert_scales(
-            actual_duration_in_days + 'd',
-            this.gantt.config.unit
-        ) / this.gantt.config.step;
-
-    this.ignored_duration_raw = this.duration - this.actual_duration_raw;
-}
 
     update_attr(element, attr, value) {
         value = +value;
